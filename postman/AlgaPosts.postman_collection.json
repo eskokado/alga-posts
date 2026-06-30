@@ -1,0 +1,439 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "AlgaPosts",
+    "description": "Collection para o sistema distribuído AlgaPosts.\n\n**Microsserviços**\n- `post-service` (porta 8080): API REST de posts\n- `text-processor-service` (porta 8081): processamento assíncrono via RabbitMQ (sem endpoints REST)\n\n**Pré-requisitos**\n1. `docker compose up -d algaposts-rabbitmq`\n2. Iniciar `text-processor-service` e `post-service`\n\nApós criar um post, aguarde alguns segundos para o processamento assíncrono preencher `wordCount` e `calculatedValue`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Post Service",
+      "item": [
+        {
+          "name": "Criar post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Retorna id UUID', function () {",
+                  "    pm.expect(json.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('postId', json.id);",
+                  "pm.environment.set('postId', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Meu primeiro post\",\n  \"body\": \"Linha um\\nLinha dois\\nLinha tres\\nLinha quatro\",\n  \"author\": \"Eskokado\"\n}"
+            },
+            "url": {
+              "raw": "{{post_service_base_url}}/api/posts",
+              "host": [
+                "{{post_service_base_url}}"
+              ],
+              "path": [
+                "api",
+                "posts"
+              ]
+            },
+            "description": "Cria um novo post, envia para a fila de processamento e retorna 201 Created.\n\n`wordCount` e `calculatedValue` não são retornados imediatamente."
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar post por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Post possui id', function () {",
+                  "    pm.expect(json.id).to.eql(pm.collectionVariables.get('postId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{post_service_base_url}}/api/posts/{{postId}}",
+              "host": [
+                "{{post_service_base_url}}"
+              ],
+              "path": [
+                "api",
+                "posts",
+                "{{postId}}"
+              ]
+            },
+            "description": "Retorna os detalhes de um post. Após o processamento assíncrono, inclui `wordCount` e `calculatedValue`."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar posts (paginado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Estrutura paginada', function () {",
+                  "    pm.expect(json).to.have.property('content');",
+                  "    pm.expect(json).to.have.property('page');",
+                  "    pm.expect(json).to.have.property('size');",
+                  "    pm.expect(json).to.have.property('totalElements');",
+                  "    pm.expect(json).to.have.property('totalPages');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{post_service_base_url}}/api/posts?page={{page}}&size={{size}}",
+              "host": [
+                "{{post_service_base_url}}"
+              ],
+              "path": [
+                "api",
+                "posts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}"
+                }
+              ]
+            },
+            "description": "Lista posts com paginação. Cada item retorna `PostSummaryOutput` com `summary` das 3 primeiras linhas do body."
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar post inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404 Not Found', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{post_service_base_url}}/api/posts/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{post_service_base_url}}"
+              ],
+              "path": [
+                "api",
+                "posts",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            },
+            "description": "Retorna 404 quando o post não existe."
+          },
+          "response": []
+        },
+        {
+          "name": "Criar post inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"body\": \"\",\n  \"author\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{post_service_base_url}}/api/posts",
+              "host": [
+                "{{post_service_base_url}}"
+              ],
+              "path": [
+                "api",
+                "posts"
+              ]
+            },
+            "description": "Validação: title, body e author são obrigatórios."
+          },
+          "response": []
+        }
+      ],
+      "description": "API REST do microsserviço post-service."
+    },
+    {
+      "name": "RabbitMQ (Management API)",
+      "item": [
+        {
+          "name": "Overview",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitmq_username}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitmq_password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://{{rabbitmq_host}}:{{rabbitmq_management_port}}/api/overview",
+              "protocol": "http",
+              "host": [
+                "{{rabbitmq_host}}"
+              ],
+              "port": "{{rabbitmq_management_port}}",
+              "path": [
+                "api",
+                "overview"
+              ]
+            },
+            "description": "Verifica se o RabbitMQ está em execução via Management API."
+          },
+          "response": []
+        },
+        {
+          "name": "Fila de processamento",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitmq_username}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitmq_password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://{{rabbitmq_host}}:{{rabbitmq_management_port}}/api/queues/%2F/{{queue_post_processing}}",
+              "protocol": "http",
+              "host": [
+                "{{rabbitmq_host}}"
+              ],
+              "port": "{{rabbitmq_management_port}}",
+              "path": [
+                "api",
+                "queues",
+                "%2F",
+                "{{queue_post_processing}}"
+              ]
+            },
+            "description": "Consulta a fila `text-processor-service.post-processing.v1.q`."
+          },
+          "response": []
+        },
+        {
+          "name": "Fila de resultado",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitmq_username}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitmq_password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://{{rabbitmq_host}}:{{rabbitmq_management_port}}/api/queues/%2F/{{queue_post_processing_result}}",
+              "protocol": "http",
+              "host": [
+                "{{rabbitmq_host}}"
+              ],
+              "port": "{{rabbitmq_management_port}}",
+              "path": [
+                "api",
+                "queues",
+                "%2F",
+                "{{queue_post_processing_result}}"
+              ]
+            },
+            "description": "Consulta a fila `post-service.post-processing-result.v1.q`."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints da Management API do RabbitMQ para monitorar filas e conexões.\n\nUI: http://localhost:15672 (rabbitmq / rabbitmq)"
+    },
+    {
+      "name": "Text Processor Service",
+      "item": [
+        {
+          "name": "Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{text_processor_service_base_url}}",
+              "host": [
+                "{{text_processor_service_base_url}}"
+              ]
+            },
+            "description": "O text-processor-service **não expõe API REST**.\n\nEle consome mensagens da fila:\n- `{{queue_post_processing}}`\n\nE publica resultados em:\n- `{{queue_post_processing_result}}`\n\nPorta configurada: 8081 (apenas para health interno Spring Boot)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Microsserviço de processamento assíncrono de texto. Comunicação exclusiva via RabbitMQ."
+    }
+  ],
+  "variable": [
+    {
+      "key": "post_service_base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "text_processor_service_base_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "postId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "page",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "size",
+      "value": "10",
+      "type": "string"
+    },
+    {
+      "key": "rabbitmq_host",
+      "value": "localhost",
+      "type": "string"
+    },
+    {
+      "key": "rabbitmq_port",
+      "value": "5672",
+      "type": "string"
+    },
+    {
+      "key": "rabbitmq_management_port",
+      "value": "15672",
+      "type": "string"
+    },
+    {
+      "key": "rabbitmq_username",
+      "value": "rabbitmq",
+      "type": "string"
+    },
+    {
+      "key": "rabbitmq_password",
+      "value": "rabbitmq",
+      "type": "string"
+    },
+    {
+      "key": "queue_post_processing",
+      "value": "text-processor-service.post-processing.v1.q",
+      "type": "string"
+    },
+    {
+      "key": "queue_post_processing_dlq",
+      "value": "text-processor-service.post-processing.v1.dlq",
+      "type": "string"
+    },
+    {
+      "key": "queue_post_processing_result",
+      "value": "post-service.post-processing-result.v1.q",
+      "type": "string"
+    },
+    {
+      "key": "queue_post_processing_result_dlq",
+      "value": "post-service.post-processing-result.v1.dlq",
+      "type": "string"
+    }
+  ]
+}
