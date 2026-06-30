@@ -1,0 +1,6 @@
+[submodule "microservices/post-service"]
+	path = microservices/post-service
+	url = git@github.com:eskokado/post-service.git
+[submodule "microservices/text-processor-service"]
+	path = microservices/text-processor-service
+	url = git@github.com:eskokado/text-processor-service.git
